@@ -1,0 +1,47 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: pavelagiconstitution
+spec:
+  crd:
+    spec:
+      names:
+        kind: PavelAgiConstitution
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package pavelagi.governance
+
+        # Rule 1: No container may run as root or elevate privileges
+        violation[{"msg": msg}] {
+          c := input.review.object.spec.template.spec.containers[_]
+          c.securityContext.allowPrivilegeEscalation == true
+          msg := sprintf("CONST-02 Violation: Container %v requests allowPrivilegeEscalation=true", [c.name])
+        }
+
+        # Rule 2: All agent deployments must mount readOnlyRootFilesystem
+        violation[{"msg": msg}] {
+          c := input.review.object.spec.template.spec.containers[_]
+          not c.securityContext.readOnlyRootFilesystem
+          msg := sprintf("CONST-04 Violation: Container %v must enable readOnlyRootFilesystem", [c.name])
+        }
+
+        # Rule 3: Zero self-deployment - must originate from verified GitOps pipeline
+        violation[{"msg": msg}] {
+          input.review.userInfo.username != "system:serviceaccount:argocd:argocd-application-controller"
+          input.review.object.metadata.namespace == "pavelagi-omega-prod"
+          input.review.operation == "CREATE"
+          msg := "CONST-03 Violation: Direct cluster mutation prohibited. All deployments must pass through ArgoCD GitOps."
+        }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: PavelAgiConstitution
+metadata:
+  name: enforce-omega-constitution
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet"]
+    namespaces:
+      - "pavelagi-omega-prod"

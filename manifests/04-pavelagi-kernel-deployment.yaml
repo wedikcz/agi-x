@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pavelagi-kernel
+  namespace: pavelagi-omega-prod
+  labels:
+    app: pavelagi-kernel
+    version: v1.0.0
+    app.kubernetes.io/part-of: cognitive-os
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: pavelagi-kernel
+  template:
+    metadata:
+      labels:
+        app: pavelagi-kernel
+        app.kubernetes.io/part-of: cognitive-os
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/api/metrics"
+    spec:
+      serviceAccountName: pavelagi-kernel-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kernel
+          image: quay.io/pavelagi/omega-kernel:v1.0.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: POSTGRES_HOST
+              value: "postgres-pgvector"
+            - name: NEO4J_URI
+              value: "bolt://neo4j-world-model:7687"
+            - name: REDIS_HOST
+              value: "redis-memory-fabric"
+            - name: OPA_URL
+              value: "http://opa-gatekeeper:8181/v1/data/pavelagi/governance"
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pavelagi-api-secrets
+                  key: gemini-api-key
+                  optional: true
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "4Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/agi/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/agi/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pavelagi-kernel-service
+  namespace: pavelagi-omega-prod
+  labels:
+    app: pavelagi-kernel
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: pavelagi-kernel

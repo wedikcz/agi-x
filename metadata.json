@@ -1,0 +1,6 @@
+{
+  "name": "PavelAGI-X Omega | Proto-AGI Cognitive Operating System",
+  "description": "Enterprise Proto-AGI platform with LangGraph orchestration, multi-tier memory fabric, world model graph, simulation sandbox, safety governor, and cognitive runtime.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
